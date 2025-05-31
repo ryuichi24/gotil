@@ -1,6 +1,7 @@
 PROJECT_NAME=gotil
 
 dev: dev-crud-server
+# dev: dev-goup
 
 dev-crud-server:
 	cd apps/crud-server && \

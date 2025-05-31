@@ -17,10 +17,11 @@ endif
 
 dev:
 	@echo "Running development server for $(PROJECT_NAME)..."
-	@go run cmd/server/main.go
+	@air
 
 build:
 	@echo "Building $(PROJECT_NAME)..."
+	@go build -o $(BUILD_DIR)/$(PROJECT_NAME) cmd/server/main.go
 	
 clean:
 	@echo "Cleaning build artifacts..."
