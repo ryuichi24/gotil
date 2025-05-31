@@ -1,0 +1,10 @@
+{
+  // https://stackoverflow.com/a/61316426
+  "[go]": {
+    "editor.formatOnSave": false,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "never"
+    }
+  },
+  "go.formatTool": "gofmt"
+}
