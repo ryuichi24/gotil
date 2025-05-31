@@ -1,0 +1,15 @@
+meta {
+  name: upload
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{BASE_URL}}:{{PORT}}/api/upload
+  body: multipartForm
+  auth: inherit
+}
+
+body:multipart-form {
+  image: @file(/Users/ryu/Desktop/Screenshot 2025-05-25 at 16.19.52.png)
+}
