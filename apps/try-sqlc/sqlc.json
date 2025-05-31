@@ -1,0 +1,16 @@
+{
+  "version": "2",
+  "sql": [
+    {
+      "engine": "sqlite",
+      "queries": ["./internal/db/sql/queries"],
+      "schema": ["./internal/db/sql/migrations"],
+      "gen": {
+        "go": {
+          "package": "sqlcctx",
+          "out": "./internal/db/gen"
+        }
+      }
+    }
+  ]
+}

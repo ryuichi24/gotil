@@ -2,3 +2,6 @@ DS_*
 build
 dist
 tmp
+*.db
+.env*
+!.env.example
