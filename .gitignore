@@ -1,4 +1,4 @@
-DS_*
+.DS_*
 build
 dist
 tmp
