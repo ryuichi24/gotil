@@ -1,0 +1,196 @@
+name: ZMQ Pub Sub Release
+
+# on:
+#   push:
+#     tags:
+#       - "v*"
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    strategy:
+      matrix:
+        include:
+          # Linux builds
+          - runner: ubuntu-latest
+            goos: linux
+            arch: amd64
+            docker_platform: linux/amd64
+          # macOS builds (native)
+          - runner: macos-13
+            goos: darwin
+            arch: amd64
+          - runner: macos-14
+            goos: darwin
+            arch: arm64
+          # Windows builds
+          - runner: windows-latest
+            goos: windows
+            arch: amd64
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21"
+
+      - name: Install ZeroMQ (macOS or linux)
+        if: matrix.goos == 'darwin' || matrix.goos == 'linux'
+        env:
+          VCPKG_DISABLE_METRICS: 1
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git
+          cd vcpkg
+          ./bootstrap-vcpkg.sh
+          # Set triplet based on OS and architecture
+          if [ "${{ matrix.goos }}" = "darwin" ]; then
+            if [ "${{ matrix.arch }}" = "arm64" ]; then
+              triplet="arm64-osx"
+            else
+              triplet="x64-osx"
+            fi
+          else
+            triplet="x64-linux"
+          fi
+          ./vcpkg install zeromq:$triplet
+          echo "PKG_CONFIG_PATH=${{ github.workspace }}/vcpkg/installed/$triplet/lib/pkgconfig:${{ github.workspace }}/vcpkg/installed/$triplet/share/pkgconfig" >> $GITHUB_ENV
+
+      - name: Install ZeroMQ (Windows)
+        if: matrix.goos == 'windows'
+        env:
+          VCPKG_DISABLE_METRICS: 1
+        shell: pwsh
+        run: |
+          # Install ZeroMQ
+          git clone https://github.com/microsoft/vcpkg.git
+          cd vcpkg
+          ./bootstrap-vcpkg.bat -disableMetrics
+          ./vcpkg install zeromq:x64-windows
+
+          # Set up environment variables for CGO
+          $vcpkgRoot = "${{ github.workspace }}/vcpkg"
+          $installDir = "$vcpkgRoot/installed/x64-windows"
+
+          # Add pkg-config path
+          $pkgConfigPath = "$installDir/lib/pkgconfig;$installDir/share/pkgconfig"
+          Add-Content -Path $env:GITHUB_ENV -Value "PKG_CONFIG_PATH=$pkgConfigPath"
+
+          # Find the actual ZeroMQ library file dynamically
+          $zmqLibs = Get-ChildItem -Path "$installDir/lib" -Filter "*zmq*.lib" | Where-Object { $_.Name -match "libzmq.*\.lib$" }
+          if ($zmqLibs.Count -eq 0) {
+            Write-Error "No ZeroMQ library found in $installDir/lib"
+            exit 1
+          }
+
+          # Use the first matching library (there should typically be only one)
+          $zmqLibName = $zmqLibs[0].Name
+          Write-Host "Found ZeroMQ library: $zmqLibName"
+
+          # Add CGO flags for ZeroMQ with dynamic library detection
+          Add-Content -Path $env:GITHUB_ENV -Value "CGO_CFLAGS=-I$installDir/include"
+          Add-Content -Path $env:GITHUB_ENV -Value "CGO_LDFLAGS=-L$installDir/lib -l:$zmqLibName"
+
+      - name: Build Go binaries
+        run: |
+          make build-pub
+          make build-sub
+
+      # Prepare artifacts
+      - name: Prepare artifacts (Windows)
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts
+          # Copy executables and dependencies for Windows
+          Copy-Item -Path "dist/pub.exe" -Destination "artifacts/pub-${{ matrix.goos }}-${{ matrix.arch }}.exe" -Force
+          Copy-Item -Path "dist/sub.exe" -Destination "artifacts/sub-${{ matrix.goos }}-${{ matrix.arch }}.exe" -Force
+
+      - name: Prepare artifacts (Unix)
+        if: matrix.goos != 'windows'
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cp -v dist/pub artifacts/pub-${{ matrix.goos }}-${{ matrix.arch }}
+          cp -v dist/sub artifacts/sub-${{ matrix.goos }}-${{ matrix.arch }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.goos }}-${{ matrix.arch }}
+          path: artifacts/*
+          retention-days: 1
+
+  create-release:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs').promises;
+            const path = require('path');
+
+            // Get the tag name from the GitHub ref
+            const tagName = context.ref.replace('refs/tags/', '');
+
+            // Create the release
+            const release = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tagName,
+              name: `Release ${tagName}`,
+              generate_notes: true,
+              draft: false,
+              prerelease: false
+            });
+
+            // Helper function to get content type
+            const getContentType = (filename) => {
+              if (filename.endsWith('.exe')) return 'application/x-msdownload';
+              return 'application/octet-stream';
+            };
+
+            // Function to recursively get all files
+            async function getFiles(dir) {
+              const entries = await fs.readdir(dir, { withFileTypes: true });
+              const files = await Promise.all(entries.map(async (entry) => {
+                const fullPath = path.join(dir, entry.name);
+                return entry.isDirectory() ? getFiles(fullPath) : fullPath;
+              }));
+              return files.flat();
+            }
+
+            // Upload all artifacts
+            const artifactsDir = path.resolve(process.env.GITHUB_WORKSPACE, 'artifacts');
+            const files = await getFiles(artifactsDir);
+
+            for (const filePath of files) {
+              const content = await fs.readFile(filePath);
+              const fileName = path.basename(filePath);
+              
+              await github.rest.repos.uploadReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.data.id,
+                name: fileName,
+                data: content,
+                headers: {
+                  'content-type': getContentType(fileName),
+                  'content-length': content.length,
+                },
+              });
+            }
