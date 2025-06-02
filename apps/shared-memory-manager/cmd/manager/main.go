@@ -2,52 +2,25 @@ package main
 
 import (
 	"fmt"
-	"github.com/ryuichi24/shared-memory-manager/internal/mmap"
+	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"syscall"
+
+	"github.com/ryuichi24/shared-memory-manager/internal/mmap"
 )
 
 const (
-	SHARED_MEMO_NAME       = "qt_shared_memory"
-	HIDDEN_CONFIG_DIR_NAME = ".cpptil"
+	SHARED_MEMO_NAME = "qt_shared_memory"
 )
-
-func getConfigDirPath(configDirName string) (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-
-	hiddenDir := filepath.Join(homeDir, configDirName)
-
-	if _, err := os.Stat(hiddenDir); os.IsNotExist(err) {
-		err = os.MkdirAll(hiddenDir, 0700)
-		if err != nil {
-			return "", err
-		}
-
-		// Set hidden attribute on Windows only
-		if runtime.GOOS == "windows" {
-			mmap.SetHiddenAttribute(hiddenDir)
-		}
-	}
-
-	return hiddenDir, nil
-}
 
 func main() {
 	fileName := SHARED_MEMO_NAME
+	tempDir := os.TempDir()
 
-	configDirPath, err := getConfigDirPath(HIDDEN_CONFIG_DIR_NAME)
-	if err != nil {
-		fmt.Println("Failed to get config directory path:", err)
-		return
-	}
-
-	fileName = filepath.Join(configDirPath, fileName)
+	fileName = filepath.Join(tempDir, fileName)
+	log.Println("Using shared memory file:", fileName)
 
 	// Open the file
 	file, err := os.OpenFile(fileName, os.O_RDONLY, 0600)
