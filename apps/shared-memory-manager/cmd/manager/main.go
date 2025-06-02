@@ -16,14 +16,21 @@ const (
 )
 
 func main() {
-	fileName := SHARED_MEMO_NAME
+	if len(os.Args) < 2 {
+		programName := os.Args[0]
+		fmt.Println("Error: Missing shared memory name argument.")
+		fmt.Printf("Usage: %s <shared_memory_name>\n", programName)
+		os.Exit(1)
+	}
+	sharedMemoryName := os.Args[1]
+
 	tempDir := os.TempDir()
 
-	fileName = filepath.Join(tempDir, fileName)
-	log.Println("Using shared memory file:", fileName)
+	sharedMemoryName = filepath.Join(tempDir, sharedMemoryName)
+	log.Println("Using shared memory file:", sharedMemoryName)
 
 	// Open the file
-	file, err := os.OpenFile(fileName, os.O_RDONLY, 0600)
+	file, err := os.OpenFile(sharedMemoryName, os.O_RDONLY, 0600)
 	if err != nil {
 		fmt.Println("Failed to open file:", err)
 		return
