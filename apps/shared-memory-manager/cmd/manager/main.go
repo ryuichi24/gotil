@@ -11,10 +11,6 @@ import (
 	"github.com/ryuichi24/shared-memory-manager/internal/mmap"
 )
 
-const (
-	SHARED_MEMO_NAME = "qt_shared_memory"
-)
-
 func main() {
 	if len(os.Args) < 2 {
 		programName := os.Args[0]
