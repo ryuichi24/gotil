@@ -7,17 +7,7 @@ import (
 	"os"
 	"syscall"
 	"unsafe"
-
-	"golang.org/x/sys/windows"
 )
-
-func SetHiddenAttribute(path string) error {
-	pathPtr, err := windows.UTF16PtrFromString(path)
-	if err != nil {
-		return err
-	}
-	return windows.SetFileAttributes(pathPtr, windows.FILE_ATTRIBUTE_HIDDEN)
-}
 
 func MmapFile(file *os.File, size int) ([]byte, error) {
 	handle, err := syscall.CreateFileMapping(syscall.Handle(file.Fd()), nil, syscall.PAGE_READONLY, 0, uint32(size), nil)

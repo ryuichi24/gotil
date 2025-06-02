@@ -8,12 +8,6 @@ import (
 	"syscall"
 )
 
-func SetHiddenAttribute(path string) error {
-	// On Unix systems, files starting with '.' are hidden by convention
-	// The directory name already starts with '.', so no additional action needed
-	return nil
-}
-
 func MmapFile(file *os.File, size int) ([]byte, error) {
 	data, err := syscall.Mmap(int(file.Fd()), 0, size, syscall.PROT_READ, syscall.MAP_SHARED)
 	if err != nil {
