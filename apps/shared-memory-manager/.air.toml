@@ -4,7 +4,7 @@ tmp_dir = "tmp"
 
 [build]
   args_bin = ["tmp_shared_memory"]
-  bin = "./dist/main"
+  bin = "./dist/reader"
   cmd = "make build"
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata"]

@@ -38,7 +38,7 @@ func main() {
 
 	defer file.Close()
 
-	data, err := mmap.MmapFile(file, 4)
+	data, err := mmap.MmapFileToRead(file, 4)
 	if err != nil {
 		fmt.Println("Failed to memory-map the file:", err)
 		os.Exit(1)

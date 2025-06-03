@@ -19,10 +19,16 @@ dev:
 	@echo "Running development server for $(PROJECT_NAME)..."
 	@air
 
-build:
+build: build-writer build-reader
+
+build-writer:
 	@echo "Building $(PROJECT_NAME)..."
-	@go build -o $(BUILD_DIR)/$(PROJECT_NAME) cmd/manager/main.go
+	@go build -o $(BUILD_DIR)/writer cmd/writer/main.go
 	
+build-reader:
+	@echo "Building $(PROJECT_NAME)..."
+	@go build -o $(BUILD_DIR)/reader cmd/reader/main.go
+
 clean:
 	@echo "Cleaning build artifacts..."
 	@rm -rf $(BUILD_DIR)
