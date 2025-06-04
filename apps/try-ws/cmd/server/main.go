@@ -27,6 +27,8 @@ func handleWebSocket(c *gin.Context) {
 	for {
 		messageType, msg, err := conn.ReadMessage()
 
+		log.Printf("Received message type: %d", messageType)
+
 		if err != nil {
 			log.Printf("Error reading message: %v", err)
 			break
@@ -49,7 +51,7 @@ func main() {
 	r.GET("/", func(c *gin.Context) {
 		c.String(http.StatusOK, "WebSocket server is running. Connect to /ws")
 	})
-	
+
 	log.Println("Starting WebSocket server on :8080")
 	if err := r.Run(":8080"); err != nil {
 		log.Fatalf("Failed to start server: %v", err)

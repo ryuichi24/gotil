@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>WebSocket Tester</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 2em;
+      }
+      input,
+      button,
+      textarea {
+        font-family: monospace;
+        font-size: 1em;
+      }
+      textarea {
+        width: 100%;
+        height: 200px;
+        margin-top: 1em;
+      }
+      .controls {
+        margin-bottom: 1em;
+      }
+      .status {
+        margin-left: 1em;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>WebSocket Tester</h1>
+    <div class="controls">
+      <label>
+        Server URL:
+        <input
+          id="wsUrl"
+          type="text"
+          value="ws://localhost:8080/ws"
+          size="40"
+        />
+      </label>
+      <button id="connectBtn">Connect</button>
+      <span class="status" id="status">Disconnected</span>
+    </div>
+
+    <div class="controls">
+      <label>
+        Message:
+        <input id="messageInput" type="text" size="40" />
+      </label>
+      <button id="sendBtn" disabled>Send</button>
+    </div>
+
+    <textarea id="log" readonly placeholder="WebSocket log..."></textarea>
+
+    <script>
+      let socket = null;
+
+      const wsUrl = document.getElementById("wsUrl");
+      const connectBtn = document.getElementById("connectBtn");
+      const sendBtn = document.getElementById("sendBtn");
+      const messageInput = document.getElementById("messageInput");
+      const log = document.getElementById("log");
+      const status = document.getElementById("status");
+
+      function logMessage(message) {
+        log.value += message + "\n";
+        log.scrollTop = log.scrollHeight;
+      }
+
+      connectBtn.addEventListener("click", () => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.close();
+          return;
+        }
+
+        try {
+          socket = new WebSocket(wsUrl.value);
+        } catch (e) {
+          logMessage("Invalid WebSocket URL");
+          return;
+        }
+
+        logMessage("Connecting to " + wsUrl.value + "...");
+        status.textContent = "Connecting...";
+
+        socket.onopen = () => {
+          logMessage("✅ Connected");
+          status.textContent = "Connected";
+          sendBtn.disabled = false;
+          connectBtn.textContent = "Disconnect";
+        };
+
+        socket.onmessage = (event) => {
+          logMessage("📥 Received: " + event.data);
+        };
+
+        socket.onerror = (event) => {
+          logMessage("❌ Error: " + event);
+        };
+
+        socket.onclose = (event) => {
+          logMessage("🔌 Disconnected");
+          status.textContent = "Disconnected";
+          sendBtn.disabled = true;
+          connectBtn.textContent = "Connect";
+        };
+      });
+
+      sendBtn.addEventListener("click", () => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          const msg = messageInput.value;
+          socket.send(msg);
+          logMessage("📤 Sent: " + msg);
+          messageInput.value = "";
+        }
+      });
+    </script>
+  </body>
+</html>
