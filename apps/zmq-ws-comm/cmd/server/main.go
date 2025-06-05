@@ -45,12 +45,12 @@ func main() {
 		InitialDelay: 100 * time.Millisecond,
 		MaxDelay:     2 * time.Second,
 	}
-	port, err := util.Retry(ctx, retryConfig, network.FindFreePort)
+	freePort, err := util.Retry(ctx, retryConfig, network.FindFreePort)
 	if err != nil {
 		log.Fatalf("Failed to find a free port: %v", err)
 	}
-	log.Printf("Found free port: %d", port)
-	zmqPubAddr := fmt.Sprintf("tcp://localhost:%d", port)
+	log.Printf("Found free port: %d", freePort)
+	zmqPubAddr := fmt.Sprintf("tcp://localhost:%d", freePort)
 	// Find a bound port of the zmq publisher
 
 	// ZeroMQ manager setup
