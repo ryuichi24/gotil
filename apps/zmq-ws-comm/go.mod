@@ -1,4 +1,4 @@
-module github.com/ryuichi24/hello-world
+module github.com/ryuichi24/zmq-ws-comm
 
 go 1.24.3
 
