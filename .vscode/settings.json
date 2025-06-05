@@ -6,5 +6,13 @@
       "source.organizeImports": "never"
     }
   },
-  "go.formatTool": "gofmt"
+  "go.formatTool": "gofmt",
+  "makefile.configureOnOpen": false,
+  "[makefile]": {
+    "editor.insertSpaces": false,
+    "editor.defaultFormatter": "ms-vscode.makefile-tools"
+  },
+  "gopls": {
+    "experimentalWorkspaceModule": true
+  }
 }
