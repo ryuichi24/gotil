@@ -210,43 +210,6 @@ func (zmq *ZeroMQManager) PublishMessage(frames []string) error {
 	return nil
 }
 
-func WritePortToSharedMemory(port int) error {
-	sharedMemoryName := "example_shared_memory"
-
-	tempDir := os.TempDir()
-	sharedMemoryPath := filepath.Join(tempDir, sharedMemoryName)
-	log.Println("Using shared memory file:", sharedMemoryPath)
-
-	// Create or open the file with read-write permissions
-	file, err := os.OpenFile(sharedMemoryPath, os.O_CREATE|os.O_RDWR, 0600)
-	if err != nil {
-		log.Fatalf("Failed to open or create file: %v", err)
-	}
-	defer file.Close()
-
-	// Ensure the file is 4 bytes long
-	if err := file.Truncate(4); err != nil {
-		log.Fatalf("Failed to truncate file: %v", err)
-	}
-
-	// Memory-map the file
-	data, err := mmap.MmapFileToWrite(file, 4)
-	if err != nil {
-		fmt.Println("Failed to memory-map the file:", err)
-		os.Exit(1)
-	}
-
-	// dispose
-	defer mmap.MunmapFile(data)
-
-	// Write the port number in little-endian format
-	binary.LittleEndian.PutUint32(data, uint32(port))
-	log.Printf("Port number %d written to shared memory.\n", port)
-	fmt.Println("Press Ctrl+C to exit.")
-
-	return nil
-}
-
 type MemWriter interface {
 	Write(mappedMem []byte, data []byte) error
 }
