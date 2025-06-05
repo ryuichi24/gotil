@@ -1,83 +1,52 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"log"
-	"net/http"
-	"unicode/utf8"
+	"os"
+	"os/signal"
+	"sync"
 
 	"github.com/gin-gonic/gin"
-	gorillaWS "github.com/gorilla/websocket"
+	srv "github.com/ryuichi24/zmq-ws-comm/pkg/server"
 	ws "github.com/ryuichi24/zmq-ws-comm/pkg/websocket"
 )
 
 func main() {
-	r := gin.Default()
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(2)
 
 	// apiBaseRouter := r.Group("/api")
 
+	// web socket connection manager setup
 	wscm := ws.NewWebSocketConnectionManager()
-
 	wscm.EventRegistry.On("example:event", func(evt ws.Event) error {
 		log.Printf("Handling example_event for WSockId: %s", evt.WSockId)
 		return nil
 	},
 	)
+	go wscm.Start(ctx, &wg)
 
-	wscm.Start()
+	// server setup
+	router := gin.Default()
+	router.GET("ws", wscm.HandleWSConnection)
+	server := srv.NewServer(":8080", router)
+	go server.Start(ctx, &wg)
 
-	// websocket route
-	upgrader := gorillaWS.Upgrader{
-		CheckOrigin: func(r *http.Request) bool {
-			return true // Allow connections from any origin
-		},
-	}
+	// Handle graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt)
 
-	r.GET("ws", func(c *gin.Context) {
-		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-		if err != nil {
-			c.String(http.StatusInternalServerError, "Failed to upgrade connection: %v", err)
-			return
-		}
+	// Wait for shutdown signal
+	log.Println("Press Ctrl+C to stop the server...")
+	<-sigChan
+	log.Println("Received shutdown signal...")
 
-		wSock := ws.NewWSocket(conn)
+	cancel()
 
-		// init a new goroutine to handle "each" connection
-		go func() {
-			defer func() { wscm.DisConnect <- wSock }()
+	// Wait for all goroutines to finish
+	wg.Wait()
 
-			for {
-				_, msg, err := conn.ReadMessage()
-				if err != nil {
-					c.String(http.StatusInternalServerError, "Failed to read message: %v", err)
-					break
-				}
-
-				if json.Valid(msg) {
-					log.Printf("Received Json message: %s", msg)
-					var evt ws.Event
-
-					if err := json.Unmarshal(msg, &evt); err != nil {
-						log.Println("JSON unmarshal error:", err)
-						break
-					}
-
-					evt.WSockId = wSock.Id
-
-					wscm.ReceiveEvt <- evt
-					continue
-				}
-
-				if utf8.Valid(msg) {
-					log.Printf("Received UTF-8 message: %s", msg)
-					continue
-				}
-
-				log.Printf("Received raw message: %s", msg)
-			}
-		}()
-	})
-
-	log.Println("Server starting on :8080")
-	r.Run(":8080")
+	log.Println("Application stopped gracefully")
 }

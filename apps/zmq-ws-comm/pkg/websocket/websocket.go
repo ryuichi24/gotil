@@ -1,12 +1,17 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
 	"log"
+	"net/http"
 	"sync"
+	"unicode/utf8"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	gorillaWS "github.com/gorilla/websocket"
 )
 
 type Event struct {
@@ -147,8 +152,13 @@ func (wscm *WebSocketConnManager) handleEvt(evt Event) {
 	}
 }
 
-func (wscm *WebSocketConnManager) Start() {
+func (wscm *WebSocketConnManager) Start(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	go func() {
+
+		defer wscm.Shutdown()
+
 		for {
 			select {
 			case wSock := <-wscm.Connect:
@@ -165,9 +175,81 @@ func (wscm *WebSocketConnManager) Start() {
 
 			case bdEvent := <-wscm.Broadcast:
 				log.Printf("Broadcasting event: %s", bdEvent.Type)
+
+			case <-ctx.Done():
+				log.Println("Closing WebSocket due to context cancellation...")
+				return
 			}
 		}
 	}()
+}
+
+func (wscm *WebSocketConnManager) Shutdown() {
+	log.Println("WebSocketConnManager shutting down")
+
+	wscm.mutex.Lock()
+	defer wscm.mutex.Unlock()
+
+	for _, conn := range wscm.Conns {
+		conn.Close()
+		log.Printf("Closed connection: %v", conn.RemoteAddr())
+	}
+	// why need to reinit this?
+	// wscm.Conns = make(map[string]*websocket.Conn)
+	log.Println("WebSocketConnManager shutdown complete")
+}
+
+func (wscm *WebSocketConnManager) HandleWSConnection(c *gin.Context) {
+	// websocket route
+	upgrader := gorillaWS.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true // Allow connections from any origin
+		},
+	}
+
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Failed to upgrade connection: %v", err)
+		return
+	}
+
+	wSock := NewWSocket(conn)
+
+	// init a new goroutine to handle "each" connection
+	go func() {
+		defer func() { wscm.DisConnect <- wSock }()
+
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Failed to read message: %v", err)
+				break
+			}
+
+			if json.Valid(msg) {
+				log.Printf("Received Json message: %s", msg)
+				var evt Event
+
+				if err := json.Unmarshal(msg, &evt); err != nil {
+					log.Println("JSON unmarshal error:", err)
+					break
+				}
+
+				evt.WSockId = wSock.Id
+
+				wscm.ReceiveEvt <- evt
+				continue
+			}
+
+			if utf8.Valid(msg) {
+				log.Printf("Received UTF-8 message: %s", msg)
+				continue
+			}
+
+			log.Printf("Received raw message: %s", msg)
+		}
+	}()
+
 }
 
 func NewWebSocketConnectionManager() *WebSocketConnManager {
