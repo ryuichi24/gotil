@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -10,7 +11,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pebbe/zmq4"
+	"github.com/ryuichi24/zmq-ws-comm/pkg/network"
 	srv "github.com/ryuichi24/zmq-ws-comm/pkg/server"
+	"github.com/ryuichi24/zmq-ws-comm/pkg/util"
 	ws "github.com/ryuichi24/zmq-ws-comm/pkg/websocket"
 )
 
@@ -37,11 +40,21 @@ func main() {
 	go server.Start(ctx, &wg)
 
 	// Find a free port for the zmq publisher
-
+	retryConfig := util.RetryConfig{
+		MaxAttempts:  5,
+		InitialDelay: 100 * time.Millisecond,
+		MaxDelay:     2 * time.Second,
+	}
+	port, err := util.Retry(ctx, retryConfig, network.FindFreePort)
+	if err != nil {
+		log.Fatalf("Failed to find a free port: %v", err)
+	}
+	log.Printf("Found free port: %d", port)
+	zmqPubAddr := fmt.Sprintf("tcp://localhost:%d", port)
 	// Find a bound port of the zmq publisher
 
 	// ZeroMQ manager setup
-	zmqManager, err := NewZeroMQManager("tcp://localhost:63542", "tcp://localhost:5556")
+	zmqManager, err := NewZeroMQManager("tcp://localhost:63542", zmqPubAddr)
 	if err != nil {
 		log.Fatalf("Failed to create ZeroMQ manager: %v", err)
 	}
