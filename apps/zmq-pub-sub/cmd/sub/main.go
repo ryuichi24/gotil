@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -9,11 +10,24 @@ import (
 )
 
 func main() {
-	// Get topic filter from command line argument
-	topicFilter := ""
-	if len(os.Args) > 1 {
-		topicFilter = os.Args[1]
+	// Define port flag
+	serverPortPtr := flag.Int("port", 8080, "Port number to run the server on")
+
+	// Parse flags
+	flag.Parse()
+
+	// Validate port range
+	serverPort := *serverPortPtr
+	if serverPort < 1 || serverPort > 65535 {
+		log.Fatalf("Invalid port number: %d. Port must be between 1 and 65535.", serverPort)
 	}
+
+	// Get topic as a required positional argument
+	args := flag.Args()
+	if len(args) < 1 {
+		log.Fatalf("Usage: %s [options] <topic>", os.Args[0])
+	}
+	topicFilter := args[0]
 
 	// Create a new SUB socket
 	subscriber, err := zmq.NewSocket(zmq.SUB)
@@ -23,41 +37,28 @@ func main() {
 	defer subscriber.Close()
 
 	// Connect to the publisher
-	err = subscriber.Connect("tcp://localhost:5555")
+	addr := fmt.Sprintf("tcp://localhost:%d", serverPort)
+	err = subscriber.Connect(addr)
 	if err != nil {
 		log.Fatalf("Failed to connect to publisher: %v", err)
 	}
 
-	// Subscribe to specific topic or all topics
-	if topicFilter != "" {
-		err = subscriber.SetSubscribe(topicFilter)
-		fmt.Printf("Subscribing to topic: %s\n", topicFilter)
-	} else {
-		err = subscriber.SetSubscribe("")
-		fmt.Println("Subscribing to all topics")
-	}
+	// Subscribe to the topic
+	err = subscriber.SetSubscribe(topicFilter)
 	if err != nil {
 		log.Fatalf("Failed to subscribe: %v", err)
 	}
-
-	fmt.Println("Subscriber started, waiting for messages...")
+	fmt.Printf("Subscribing to topic: %s\n", topicFilter)
+	fmt.Println("Subscriber started on", addr)
 
 	// Receive messages
 	for {
-		// Receive topic first
-		topic, err := subscriber.Recv(0)
+		msgs, err := subscriber.RecvMessage(0)
 		if err != nil {
 			log.Printf("Failed to receive topic: %v", err)
 			continue
 		}
 
-		// Receive message
-		message, err := subscriber.Recv(0)
-		if err != nil {
-			log.Printf("Failed to receive message: %v", err)
-			continue
-		}
-
-		fmt.Printf("Received on topic '%s': %s\n", topic, message)
+		log.Printf("Received message: %v", msgs)
 	}
 }

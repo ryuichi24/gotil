@@ -6,6 +6,7 @@ import (
 	"time"
 
 	zmq "github.com/pebbe/zmq4"
+	"github.com/ryuichi24/zmq-pub-sub/pkg/network"
 )
 
 func main() {
@@ -16,13 +17,19 @@ func main() {
 	}
 	defer publisher.Close()
 
+	freePort, err := network.FindFreePort()
+	if err != nil {
+		log.Fatalf("Failed to find free port: %v", err)
+	}
+
+	addr := fmt.Sprintf("tcp://localhost:%d", freePort)
 	// Bind the socket to a port
-	err = publisher.Bind("tcp://*:5555")
+	err = publisher.Bind(addr)
 	if err != nil {
 		log.Fatalf("Failed to bind publisher socket: %v", err)
 	}
 
-	fmt.Println("Publisher started, waiting for subscribers...")
+	fmt.Printf("Publisher started on %s\n", addr)
 	time.Sleep(time.Second) // Give subscribers time to connect
 
 	// Topics to publish to
