@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	ZMQ_PUB_MMEM_NAME = "ZMQ_PUB_MMEM_NAME"
+	ZMQ_PUB_MMEM_NAME          = "ZMQ_PUB_MMEM_NAME"
 	ZMQ_EXTERNAL_PUB_MMEM_NAME = "ZMQ_EXTERNAL_PUB_MMEM_NAME"
 )
 
@@ -41,13 +41,14 @@ func main() {
 	// init wait group to wait for goroutines to finish
 	var wg sync.WaitGroup
 	wg.Add(3)
-	// start goroutines and pass ctx to each
 
+	// Initialize ZMQPublisher
 	zmqPublisher, err := NewZMQPublisher()
 	if err != nil {
 		log.Fatalf("Failed to create ZMQPublisher: %v", err)
 	}
 
+	// Initialize ZMQSubscriber
 	zmqSubscriber, err := NewZMQSubscriber()
 	if err != nil {
 		log.Fatalf("Failed to create ZMQSubscriber: %v", err)
@@ -59,6 +60,7 @@ func main() {
 		return nil
 	})
 
+	// initialize the server with ZMQPublisher and ZMQSubscriber
 	server := NewServer(fmt.Sprintf(":%d", serverPort), zmqPublisher, zmqSubscriber)
 	server.SetupRouter(func(router *gin.Engine, ctx *ServerCtx) {
 		// cors
@@ -71,8 +73,29 @@ func main() {
 			MaxAge:           12 * time.Hour,
 		}))
 
-		// web socket endpoint
-		router.GET("/ws", func(c *gin.Context) {})
+		// Server Sent Events (SSE) endpoint
+		sseRouter := router.Group("/sse")
+		sseRouter.Use(NewSSE(NewSSEConfig()))
+		sseRouter.GET("/core", func(c *gin.Context) {
+			// Set headers for SSE
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-c.Request.Context().Done():
+					log.Println("SSE connection closed")
+					return
+				case msgs := <-ctx.zmqSub.OnReceive:
+					// Handle incoming messages from ZMQ subscriber
+					c.SSEvent("core:notifications", fmt.Sprintf("ZMQ Message: %v", msgs))
+					c.Writer.Flush() // Ensure the message is sent immediately
+				case <-ticker.C:
+					// Send a simple message
+					c.SSEvent("message", fmt.Sprintf("Current time: %s", time.Now().Format(time.RFC3339)))
+					c.Writer.Flush() // Ensure the message is sent immediately
+				}
+			}
+		})
 
 		// REST API endpoints
 		restRouter := router.Group("/api")
@@ -108,6 +131,7 @@ func main() {
 		})
 	})
 
+	// start goroutines and pass ctx to each
 	go zmqPublisher.Start(ctx, &wg)
 	go zmqSubscriber.Start(ctx, &wg)
 	go server.Start(ctx, &wg)
@@ -196,6 +220,15 @@ func (p *ZMQPublisher) Shutdown() {
 func (p *ZMQPublisher) Publish(topic string, event string, payload json.RawMessage) error {
 	log.Printf("Publishing message to topic: %s, event: %s, payload: %s\n", topic, event, payload)
 	// Here you would implement the logic to publish the message to ZMQ
+	frames := []string{topic, event, string(payload)}
+
+	_, err := p.sock.SendMessage(frames)
+	if err != nil {
+		log.Printf("Failed to send topic: %v", err)
+	}
+
+	log.Printf("Message published to topic '%s' with event '%s'\n", topic, event)
+
 	return nil
 }
 
@@ -307,6 +340,9 @@ func (s *ZMQSubscriber) Listen(ctx context.Context) {
 					log.Println("Received empty message, skipping...")
 					continue
 				}
+
+				// Send the received messages to the channel
+				s.OnReceive <- msgs
 
 				topic := msgs[0]
 				log.Printf("Received message on topic '%s': %v\n", topic, msgs)
@@ -423,4 +459,23 @@ func (s *Server) SetupRouter(routeSetter func(router *gin.Engine, ctx *ServerCtx
 	routeSetter(s.router, ctx)
 
 	return nil
+}
+
+// Server Send Events (SSE) handler
+
+type SSEConfig struct {
+	//
+}
+
+func NewSSEConfig() SSEConfig {
+	return SSEConfig{}
+}
+
+func NewSSE(config SSEConfig) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Next()
+	}
 }
