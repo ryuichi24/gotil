@@ -38,7 +38,7 @@ gensqlc:
 name ?= "default"
 genmgt:
 	@echo "Generating management files..."
-	@goose sqlite3 create $(name) sql -dir internal/db/sql/migrations
+	@goose create $(name) sql -dir internal/db/sql/migrations
 
 db ?= "./test.db"
 up:
